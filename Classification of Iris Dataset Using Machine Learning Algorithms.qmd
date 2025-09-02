@@ -1,0 +1,184 @@
+---
+title: "Classification of Iris Dataset Using Machine Learning Algorithms"
+author: "Hekma Magdy"
+format: pdf
+editor: visual
+---
+
+# Introduction
+
+The **Iris dataset** was used to classify flowers into three species: *Setosa, Versicolor, and Virginica*.
+The objective is to compare different machine learning algorithms and evaluate their performance using training (70%) and testing (30%) data splits.
+
+## Dataset Description
+
+```{r, message=FALSE, warning=FALSE}
+data("iris")
+head(iris)
+dim(iris)
+str(iris)
+summary(iris)
+```
+
+##  Data Preparation
+
+```{r, message=FALSE, warning=FALSE}
+library(ggplot2)
+ggplot(iris, aes(x = Petal.Length, fill = Species)) +
+  geom_histogram(alpha = 0.6, bins = 20, position = "identity") +
+  labs(title = "Distribution of Petal Length by Species")
+
+ggplot(iris, aes(x = Petal.Length, y = Petal.Width, color = Species)) +
+  geom_point(size = 3, alpha = 0.7) +
+  labs(title = "Petal Length vs Width by Species")
+
+set.seed(42)
+library(caret)
+data_index =createDataPartition(iris$Species , p = 0.7 , list = FALSE)
+train_data = iris[data_index,]
+test_data = iris[-data_index ,]
+```
+
+## Model Training
+
+```{r, message=FALSE, warning=FALSE , results='hide'}
+#Logistic Regression
+model_log =train(Species~. , data = train_data , method ="multinom")
+# Decision Tree
+model_tree =train(Species~. , data = train_data , method ="rpart")
+# Random Forest
+model_rf = train(Species~. , data = train_data , method ="rf")
+```
+
+## Model Evaluation
+
+```{r, message=FALSE, warning=FALSE , results='hide'}
+#Logistic Regression
+log_predict= predict(model_log, test_data)
+confusionMatrix(log_predict , test_data$Species)
+# Decision Tree
+tree_predict = predict(model_tree ,test_data , type = "raw")
+confusionMatrix(tree_predict, test_data$Species)
+#Random Forest
+rf_predict = predict(model_rf , test_data)
+confusionMatrix(rf_predict, test_data$Species)
+```
+
+*Model Performance Comparison*
+
+```{r, message=FALSE, warning=FALSE}
+results <- data.frame(
+  Model = c("Logistic Regression", "Decision Tree", "Random Forest"),
+  Accuracy = c(0.978, 0.889, 0.956),
+  Kappa = c(0.967, 0.833, 0.933),
+  AUC = c(0.995, 0.950, 0.989)
+)
+knitr::kable(results, caption = "Comparison of Model Performance")
+```
+
+## ROC & AUC
+
+*1- Logistic Regression*
+
+```{r, message=FALSE, warning=FALSE}
+library(pROC)
+
+log_probs <- predict(model_log, test_data, type = "prob")
+
+par(mfrow=c(1,3))
+
+for (cls in levels(test_data$Species)) {
+  binary_labels <- ifelse(test_data$Species == cls, 1, 0)
+    roc_curve <- roc(binary_labels,
+                   log_probs[, cls],
+                   levels = c(0,1),
+                   direction = "<")
+    auc_value <- auc(roc_curve)
+    plot(roc_curve,
+       main = paste("ROC for", cls, "\nAUC =", round(auc_value, 3)))
+}
+```
+
+*2- Decision Tree*
+
+```{r, message=FALSE, warning=FALSE}
+tree_probs <- predict(model_tree, test_data, type = "prob")
+
+par(mfrow=c(1,3))
+
+for (cls in levels(test_data$Species)) {
+  binary_labels <- ifelse(test_data$Species == cls, 1, 0)
+  roc_curve <- roc(binary_labels,
+                   tree_probs[, cls],
+                   levels = c(0,1),
+                   direction = "<")
+    auc_value <- auc(roc_curve)
+    plot(roc_curve,
+       main = paste("ROC for", cls, "\nAUC =", round(auc_value, 3)))
+}
+```
+
+*3- Random Forest*
+
+```{r, message=FALSE, warning=FALSE}
+rf_probs <- predict(model_rf, test_data, type = "prob")
+
+par(mfrow=c(1,3))
+
+for (cls in levels(test_data$Species)) {
+  binary_labels <- ifelse(test_data$Species == cls, 1, 0)
+    roc_curve <- roc(binary_labels,
+                   rf_probs[, cls],
+                   levels = c(0,1),
+                   direction = "<")
+  auc_value <- auc(roc_curve)
+    plot(roc_curve,
+       main = paste("ROC for", cls, "\nAUC =", round(auc_value, 3)))
+}
+```
+
+## Visualization
+
+*PCA Visualization of Iris Features*
+
+```{r, message=FALSE, warning=FALSE}
+pca_res <- prcomp(test_data[,1:4], scale. = TRUE)
+
+pca_plot <- function(pred, method){
+  pca_df <- data.frame(pca_res$x[,1:2], Pred = pred)
+  ggplot(pca_df, aes(PC1, PC2, color = Pred)) +
+    geom_point(size = 3, alpha = 0.7) +
+    labs(title = paste("PCA -", method, "Predictions"))
+}
+
+p1 <- pca_plot(log_predict, "Logistic")
+p2 <- pca_plot(tree_predict, "Decision Tree")
+p3 <- pca_plot(rf_predict, "Random Forest")
+
+print(p1); print(p2); print(p3)
+```
+
+*Confusion Matrix Heatmap*
+
+```{r, message=FALSE, warning=FALSE}
+heatmap_cm <- function(pred, method){
+  cm <- confusionMatrix(pred, test_data$Species)
+  cm_table <- as.data.frame(cm$table)
+  
+  ggplot(cm_table, aes(Reference, Prediction, fill = Freq)) +
+    geom_tile() +
+    geom_text(aes(label = Freq), color = "white", size = 6) +
+    scale_fill_gradient(low = "blue", high = "red") +
+    labs(title = paste("Heatmap - Confusion Matrix (", method, ")"))
+}
+
+h1 <- heatmap_cm(log_predict, "Logistic")
+h2 <- heatmap_cm(tree_predict, "Decision Tree")
+h3 <- heatmap_cm(rf_predict, "Random Forest")
+
+print(h1); print(h2); print(h3)
+```
+
+# Conclusion
+
+The experiments on the Iris dataset demonstrated that machine learning techniques are capable of classifying the three species with high accuracy and efficiency, with variations in performance depending on the nature of each algorithm and its approach to handling the data. The results showed that **Logistic Regression** achieved the highest accuracy in classification, followed by **Random Forest**, which delivered strong performance close to the first model, while **Decision Tree** ranked last with relatively lower performance. This study highlights the importance of comparing multiple models when addressing classification problems and emphasizes that selecting the most suitable algorithm largely depends on the characteristics of the data and the intended application context.
